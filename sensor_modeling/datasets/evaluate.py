@@ -16,14 +16,125 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import timedelta
+from statistics import median
 from typing import Any
 
 from ..evaluation.metrics import StateMetrics, state_metrics
 from ..online import BehaviouralSensingPipeline, PipelineConfig
-from ..online.pipeline import scoring_steps
+from ..online.pipeline import PipelineStep, scoring_steps
+from ..states.ontology import BehaviouralState
 from .casas import CasasRecording, truth_series
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class UncertaintyDiagnostics:
+    """Uncertainty summaries split by whether a scored estimate was correct."""
+
+    scored: int
+    correct: int
+    median_confidence_correct: float | None
+    median_confidence_incorrect: float | None
+    median_margin_correct: float | None
+    median_margin_incorrect: float | None
+    median_normalised_entropy_correct: float | None
+    median_normalised_entropy_incorrect: float | None
+    median_evidence_strength_correct: float | None
+    median_evidence_strength_incorrect: float | None
+
+    def to_dict(self) -> dict[str, int | float | None]:
+        """Return a serialisable representation."""
+        return {
+            "scored": self.scored,
+            "correct": self.correct,
+            "median_confidence_correct": self.median_confidence_correct,
+            "median_confidence_incorrect": self.median_confidence_incorrect,
+            "median_margin_correct": self.median_margin_correct,
+            "median_margin_incorrect": self.median_margin_incorrect,
+            "median_normalised_entropy_correct": self.median_normalised_entropy_correct,
+            "median_normalised_entropy_incorrect": self.median_normalised_entropy_incorrect,
+            "median_evidence_strength_correct": self.median_evidence_strength_correct,
+            "median_evidence_strength_incorrect": self.median_evidence_strength_incorrect,
+        }
+
+
+def _median(values: list[float]) -> float | None:
+    """Return the median, or ``None`` when no values are available."""
+    return float(median(values)) if values else None
+
+
+def _evidence_strength(step: PipelineStep) -> float:
+    """Mean absolute log-likelihood margin from informative sensors.
+
+    This separates posterior certainty from the amount of interval-level sensor
+    evidence that produced it. A highly concentrated posterior with little
+    evidence is exactly the pattern expected if the transition prior is carrying
+    more confidence than the observations justify.
+    """
+    margins = [
+        abs(contribution.support)
+        for contribution in step.state.evidence
+        if contribution.informative
+    ]
+    return float(sum(margins) / len(margins)) if margins else 0.0
+
+
+def uncertainty_diagnostics(
+    truth: list[BehaviouralState | None], steps: list[PipelineStep]
+) -> UncertaintyDiagnostics:
+    """Summarise confidence and evidence strength on scored positions."""
+    if len(truth) != len(steps):
+        raise ValueError("truth and steps must have the same length")
+
+    correct_confidence: list[float] = []
+    incorrect_confidence: list[float] = []
+    correct_margin: list[float] = []
+    incorrect_margin: list[float] = []
+    correct_entropy: list[float] = []
+    incorrect_entropy: list[float] = []
+    correct_evidence: list[float] = []
+    incorrect_evidence: list[float] = []
+
+    scored = 0
+    correct = 0
+    for label, step in zip(truth, steps, strict=True):
+        if label is None:
+            continue
+
+        scored += 1
+        is_correct = step.state.state == label
+        if is_correct:
+            correct += 1
+
+        confidence = step.state.confidence
+        margin = step.state.margin
+        entropy = step.state.normalised_entropy
+        evidence = _evidence_strength(step)
+
+        if is_correct:
+            correct_confidence.append(confidence)
+            correct_margin.append(margin)
+            correct_entropy.append(entropy)
+            correct_evidence.append(evidence)
+        else:
+            incorrect_confidence.append(confidence)
+            incorrect_margin.append(margin)
+            incorrect_entropy.append(entropy)
+            incorrect_evidence.append(evidence)
+
+    return UncertaintyDiagnostics(
+        scored=scored,
+        correct=correct,
+        median_confidence_correct=_median(correct_confidence),
+        median_confidence_incorrect=_median(incorrect_confidence),
+        median_margin_correct=_median(correct_margin),
+        median_margin_incorrect=_median(incorrect_margin),
+        median_normalised_entropy_correct=_median(correct_entropy),
+        median_normalised_entropy_incorrect=_median(incorrect_entropy),
+        median_evidence_strength_correct=_median(correct_evidence),
+        median_evidence_strength_incorrect=_median(incorrect_evidence),
+    )
 
 
 @dataclass(frozen=True)
@@ -34,6 +145,9 @@ class DatasetEvaluation:
     ----------
     metrics
         State-inference quality over the positions that carried a label.
+    uncertainty
+        Confidence, posterior-shape and interval-level evidence summaries split
+        by correct and incorrect scored estimates.
     steps
         Pipeline steps produced.
     scored
@@ -45,6 +159,7 @@ class DatasetEvaluation:
     """
 
     metrics: StateMetrics
+    uncertainty: UncertaintyDiagnostics
     steps: int
     scored: int
     labelled_fraction: float
@@ -56,15 +171,10 @@ class DatasetEvaluation:
         return self.scored / self.steps if self.steps else 0.0
 
     def to_dict(self) -> dict[str, Any]:
-        """Return a serialisable form, coverage alongside the scores.
-
-        Coverage travels with the metrics deliberately. A balanced accuracy
-        computed over a tenth of a recording is a different claim from one
-        computed over most of it, and separating the two invites the reader to
-        forget the difference.
-        """
+        """Return a serialisable form, coverage alongside the scores."""
         return {
             "metrics": self.metrics.to_dict(),
+            "uncertainty": self.uncertainty.to_dict(),
             "steps": self.steps,
             "scored": self.scored,
             "scored_fraction": self.scored_fraction,
@@ -108,8 +218,6 @@ def evaluate_recording(
     pipeline = BehaviouralSensingPipeline(recording.registry, config=settings)
     steps = pipeline.run(recording.observations)
     steps.extend(pipeline.close(recording.observations[-1].timestamp))
-    # close() re-emits the final estimate as a reporting step; scoring it as
-    # well would weight that one point twice.
     steps = scoring_steps(steps)
     if not steps:
         raise ValueError("pipeline produced no steps for this recording")
@@ -124,6 +232,7 @@ def evaluate_recording(
 
     return DatasetEvaluation(
         metrics=state_metrics(truth, [s.state for s in steps]),
+        uncertainty=uncertainty_diagnostics(truth, steps),
         steps=len(steps),
         scored=scored,
         labelled_fraction=recording.labelled_fraction,
