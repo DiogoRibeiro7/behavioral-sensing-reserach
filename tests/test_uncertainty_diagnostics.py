@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from typing import cast
 
 import numpy as np
+import pytest
 
 from sensor_modeling.datasets.evaluate import uncertainty_diagnostics
 from sensor_modeling.fusion.estimate import EvidenceContribution, StateEstimate
@@ -64,10 +65,10 @@ def test_uncertainty_diagnostics_split_correct_from_incorrect() -> None:
 
     assert result.scored == 2
     assert result.correct == 1
-    assert result.median_confidence_correct == 0.80
-    assert result.median_confidence_incorrect == 0.90
-    assert result.median_evidence_strength_correct == 2.0
-    assert result.median_evidence_strength_incorrect == 0.2
+    assert result.median_confidence_correct == pytest.approx(0.80)
+    assert result.median_confidence_incorrect == pytest.approx(0.90)
+    assert result.median_evidence_strength_correct == pytest.approx(2.0)
+    assert result.median_evidence_strength_incorrect == pytest.approx(0.2)
     assert result.median_margin_correct is not None
     assert result.median_margin_incorrect is not None
     assert result.median_normalised_entropy_correct is not None
@@ -85,6 +86,6 @@ def test_uncertainty_diagnostics_ignore_unlabelled_steps() -> None:
 
     assert result.scored == 1
     assert result.correct == 1
-    assert result.median_confidence_correct == 0.75
+    assert result.median_confidence_correct == pytest.approx(0.75)
     assert result.median_confidence_incorrect is None
     assert result.median_evidence_strength_incorrect is None
