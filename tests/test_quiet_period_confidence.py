@@ -35,9 +35,7 @@ def _filter() -> MultimodalBayesFilter:
     )
 
 
-def _after_one_quiet_hour(
-    model: MultimodalBayesFilter, *, reliability: float
-):
+def _after_one_quiet_hour(model: MultimodalBayesFilter, *, reliability: float):
     """Advance twelve five-minute intervals without sensor activations."""
     estimate = model.update(T0, (), reliabilities=reliability)
     for index in range(1, 13):
