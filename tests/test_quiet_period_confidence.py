@@ -97,4 +97,7 @@ def test_extreme_confidence_requires_complementary_silence_streams() -> None:
     assert door_only.confidence < 0.50
     assert combined.most_likely is BehaviouralState.SLEEPING
     assert combined.confidence > 0.95
-    assert combined.confidence > max(motion_only.confidence, door_only.confidence) + 0.35
+    assert (
+        combined.confidence
+        > max(motion_only.confidence, door_only.confidence) + 0.35
+    )
