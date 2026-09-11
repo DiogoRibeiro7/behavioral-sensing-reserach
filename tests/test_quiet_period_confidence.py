@@ -18,13 +18,19 @@ from sensor_modeling.observations import SensorRegistry
 from sensor_modeling.states import BehaviouralState, StateOntology
 
 T0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
+DEFAULT_LOCATIONS = (
+    "Kitchen",
+    "Bathroom",
+    "Bedroom",
+    "LivingRoom",
+    "Hall",
+    "FrontDoor",
+)
 
 
-def _filter() -> MultimodalBayesFilter:
-    """Build a small aggregate-room deployment representative of CASAS hh."""
-    specs, unmapped = hh_sensor_specs(
-        ["Kitchen", "Bathroom", "Bedroom", "LivingRoom", "Hall", "FrontDoor"]
-    )
+def _filter(locations: tuple[str, ...] = DEFAULT_LOCATIONS) -> MultimodalBayesFilter:
+    """Build an aggregate-room deployment representative of CASAS hh."""
+    specs, unmapped = hh_sensor_specs(locations)
     assert not unmapped
     registry = SensorRegistry.from_specs(specs)
     ontology = StateOntology()
@@ -72,3 +78,23 @@ def test_quiet_period_saturation_requires_silence_likelihoods() -> None:
         np.mean([abs(item.support) for item in silent_sensors.evidence])
     )
     assert evidence_strength < 0.02
+
+
+def test_extreme_confidence_requires_complementary_silence_streams() -> None:
+    """Room-motion and entrance-door silence eliminate different alternatives."""
+    motion_only = _after_one_quiet_hour(
+        _filter(("Kitchen", "Bathroom", "Bedroom", "LivingRoom", "Hall")),
+        reliability=1.0,
+    )
+    door_only = _after_one_quiet_hour(_filter(("FrontDoor",)), reliability=1.0)
+    combined = _after_one_quiet_hour(_filter(), reliability=1.0)
+
+    # Neither evidence family is sufficient on its own to create an extreme
+    # posterior. Room silence favours low-activity/absence states, while door
+    # silence penalises away and general activity. Their intersection leaves
+    # sleeping overwhelmingly preferred.
+    assert motion_only.confidence < 0.60
+    assert door_only.confidence < 0.50
+    assert combined.most_likely is BehaviouralState.SLEEPING
+    assert combined.confidence > 0.95
+    assert combined.confidence > max(motion_only.confidence, door_only.confidence) + 0.35
