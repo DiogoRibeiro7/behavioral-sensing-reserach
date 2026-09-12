@@ -10,6 +10,7 @@
 - Added utilities for measuring and fitting emission rates from annotated recordings.
 - Added typed sensor-ingestion exceptions using `DataExcept` while preserving legacy `ValueError` and `ImportError` catch behaviour.
 - Added frozen external-validation machinery, cohort provenance, one-shot scoring controls, and line-ending-safe digest verification for tracked freeze artifacts.
+- Added uncertainty diagnostics separating confidence, posterior margin, entropy, interval-level evidence strength, and per-update information gain without changing the abstention rule.
 
 ## External validation
 
@@ -37,13 +38,23 @@ Across the 22-home development panel, the pipeline reaches a median balanced acc
 
 The real-data work also identified a central negative result: the current abstention mechanism does not provide reliable evidence about when the model is wrong. On real recordings, confidence only weakly separates correct from incorrect predictions and becomes less reliable in the highest-confidence band. In the frozen confirmatory simulation, abstention remains effectively silent even as missingness rises substantially.
 
-That negative result remains open in `0.3.0`; it is not hidden by the successful circadian transfer result.
+Controlled quiet-period diagnostics narrow the mechanism. The transition prior alone remains near the stationary posterior; extreme confidence appears when complementary Poisson silence likelihoods from working room-motion and entrance-door streams accumulate under the persistent dynamics. Version `0.3.0` exposes this rather than hiding it: `StateEstimate` now includes optional per-update information gain,
+
+\[
+D_{\mathrm{KL}}\!\left(p_t\,\|\,p_{t|t-1}\right),
+\]
+
+as a passive diagnostic of how much the current interval moved the predicted belief. It does **not** enter abstention or add a new threshold.
+
+That negative abstention result remains open in `0.3.0`; it is not hidden by the successful circadian transfer result.
 
 ## Compatibility
 
 The circadian profile is optional and off by default, so existing inference behaviour remains available when it is not configured.
 
 The new ingestion exceptions retain compatibility with broad catches used by earlier callers: sensor loading, format, validation, and missing-data errors continue to be catchable as `ValueError`, while dependency failures remain catchable as `ImportError`.
+
+The new `StateEstimate.information_gain` field is optional. Manually constructed estimates remain compatible and receive `None` unless an update-level information gain is supplied.
 
 ## Archive status
 
