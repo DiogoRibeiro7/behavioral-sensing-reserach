@@ -18,13 +18,13 @@ from sensor_modeling.observations import SensorRegistry
 from sensor_modeling.states import BehaviouralState, StateOntology
 
 T0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
+MOTION_LOCATIONS = ("Kitchen", "Bathroom", "Bedroom", "LivingRoom", "Hall")
+DEFAULT_LOCATIONS = (*MOTION_LOCATIONS, "FrontDoor")
 
 
-def _filter() -> MultimodalBayesFilter:
-    """Build a small aggregate-room deployment representative of CASAS hh."""
-    specs, unmapped = hh_sensor_specs(
-        ["Kitchen", "Bathroom", "Bedroom", "LivingRoom", "Hall", "FrontDoor"]
-    )
+def _filter(locations: tuple[str, ...] = DEFAULT_LOCATIONS) -> MultimodalBayesFilter:
+    """Build an aggregate-room deployment representative of CASAS hh."""
+    specs, unmapped = hh_sensor_specs(locations)
     assert not unmapped
     registry = SensorRegistry.from_specs(specs)
     ontology = StateOntology()
@@ -52,23 +52,32 @@ def test_quiet_period_saturation_requires_silence_likelihoods() -> None:
     prior_only = _after_one_quiet_hour(_filter(), reliability=0.0)
     silent_sensors = _after_one_quiet_hour(_filter(), reliability=1.0)
 
-    # With all sensor likelihoods disabled, a filter initialised at stationarity
-    # remains at stationarity. The transition dynamics alone do not become
-    # certain during the quiet hour.
     stationary_confidence = float(StateOntology().stationary().max())
     assert prior_only.confidence == pytest.approx(stationary_confidence)
     assert prior_only.confidence < 0.35
 
-    # With the same transition dynamics but working event sensors, an hour with
-    # no activations is repeatedly interpreted through the Poisson silence
-    # likelihoods. The posterior becomes extremely concentrated on sleeping.
     assert silent_sensors.most_likely is BehaviouralState.SLEEPING
     assert silent_sensors.confidence > 0.95
 
-    # No individual sensor strongly singles out sleeping in the final interval.
-    # The concentration is produced by the accumulated joint pattern of weak,
-    # mostly ambiguous silence evidence interacting with the state dynamics.
     evidence_strength = float(
         np.mean([abs(item.support) for item in silent_sensors.evidence])
     )
     assert evidence_strength < 0.02
+
+
+def test_extreme_confidence_requires_complementary_silence_streams() -> None:
+    """Room-motion and entrance-door silence eliminate different alternatives."""
+    motion_only = _after_one_quiet_hour(
+        _filter(MOTION_LOCATIONS),
+        reliability=1.0,
+    )
+    door_only = _after_one_quiet_hour(_filter(("FrontDoor",)), reliability=1.0)
+    combined = _after_one_quiet_hour(_filter(), reliability=1.0)
+
+    assert motion_only.confidence < 0.60
+    assert door_only.confidence < 0.50
+    assert combined.most_likely is BehaviouralState.SLEEPING
+    assert combined.confidence > 0.95
+
+    partial_confidence = max(motion_only.confidence, door_only.confidence)
+    assert combined.confidence - partial_confidence > 0.35
