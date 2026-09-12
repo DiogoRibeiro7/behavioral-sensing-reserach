@@ -41,9 +41,9 @@ jobs:
 
           paper_only=true
           paper_python=false
-          # Prose only: nothing here can change what the test suite exercises.
+          # Prose only: nothing here can change package code or tests.
           # README.md is excluded because it feeds package metadata checks;
-          # mkdocs.yml is included because docs still run and catch nav errors.
+          # mkdocs.yml is included because the docs build validates navigation.
           docs_only=true
           for file in "${files[@]}"; do
             if [[ "$file" != papers/* ]]; then
@@ -104,7 +104,9 @@ jobs:
 
   lint:
     needs: changes
-    if: needs.changes.outputs.full_repo == 'true'
+    if: >-
+      needs.changes.outputs.full_repo == 'true'
+      && needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -131,9 +133,6 @@ jobs:
 
   test:
     needs: changes
-    # Skipped for prose-only changes; the three-version matrix is the expensive
-    # job. lint, docs and package still run, so formatting, docs and packaging
-    # regressions remain covered.
     if: >-
       needs.changes.outputs.full_repo == 'true'
       && needs.changes.outputs.docs_only != 'true'
@@ -188,7 +187,9 @@ jobs:
 
   package:
     needs: changes
-    if: needs.changes.outputs.full_repo == 'true'
+    if: >-
+      needs.changes.outputs.full_repo == 'true'
+      && needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -232,12 +233,15 @@ jobs:
           echo "lint ${{ needs.lint.result }}  test ${{ needs.test.result }}"
           echo "docs ${{ needs.docs.result }}  package ${{ needs.package.result }}"
 
-          required="lint docs package"
-          if [[ "$docs_only" != "true" || "${{ needs.test.result }}" != "skipped" ]]; then
-            required="$required test"
+          if [[ "$docs_only" == "true" ]]; then
+            [[ "${{ needs.docs.result }}" == "success" ]] || exit 1
+            [[ "${{ needs.lint.result }}" == "skipped" ]] || exit 1
+            [[ "${{ needs.test.result }}" == "skipped" ]] || exit 1
+            [[ "${{ needs.package.result }}" == "skipped" ]] || exit 1
+            exit 0
           fi
 
-          for job in $required; do
+          for job in lint test docs package; do
             case "$job" in
               lint) result="${{ needs.lint.result }}" ;;
               test) result="${{ needs.test.result }}" ;;
