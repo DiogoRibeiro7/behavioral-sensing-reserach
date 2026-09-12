@@ -55,9 +55,12 @@ def test_quiet_period_saturation_requires_silence_likelihoods() -> None:
     stationary_confidence = float(StateOntology().stationary().max())
     assert prior_only.confidence == pytest.approx(stationary_confidence)
     assert prior_only.confidence < 0.35
+    assert prior_only.information_gain == pytest.approx(0.0, abs=1e-12)
 
     assert silent_sensors.most_likely is BehaviouralState.SLEEPING
     assert silent_sensors.confidence > 0.95
+    assert silent_sensors.information_gain is not None
+    assert silent_sensors.information_gain > 0.0
 
     evidence_strength = float(
         np.mean([abs(item.support) for item in silent_sensors.evidence])
