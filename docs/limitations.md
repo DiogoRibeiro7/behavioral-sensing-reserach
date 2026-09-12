@@ -4,6 +4,97 @@ This page states what the ambient-sensing pipeline does **not** establish. It
 is deliberately blunt. A monitoring system whose limitations are not written
 down will have them discovered by whoever trusts it first.
 
+## Measured on real data
+
+Twenty-two real CASAS homes have been scored with nothing refitted and nothing
+discarded, over a median 90% of each recording.
+
+| | Simulator | Real homes (median) |
+| --- | --- | --- |
+| Balanced accuracy | 0.816 | **0.420** |
+| Calibration error | 0.084 | **0.314** |
+
+No home exceeded 0.514. Sleeping (0.74), general activity (0.58) and cooking
+(0.57) hold up. **`home_inactive` is the genuine failure at 0.16** — a resident
+sitting still is the state the pipeline is worst at recognising.
+
+Declared event rates are measurably wrong: real in-room sensors fire at 299/h
+during bathroom activity and 580/h during cooking against a declared 40/h. That
+is a plausible mechanism, since `HOME_INACTIVE` is declared to emit roughly 10
+activations an hour and a still resident produces far fewer. Substituting
+measured rates doubles to triples `home_inactive` recall but costs sleeping
+recall and calibration, so it points the work somewhere specific without
+resolving it.
+
+**Abstention cannot be repaired by raising its threshold.** It fired on 2.2% of
+steps while the model was wrong more often than right, and the obvious fix —
+thresholds tuned for a simulator where the model is right 82% of the time — does
+not work. Over 60,948 scored steps, stated confidence separates right from wrong
+by only 0.073, and the relationship inverts where it matters: the 0.95-1.00
+band, covering 39% of all steps, is *less* accurate (0.561) than the 0.85-0.95
+band (0.653). Raising the threshold discards the pipeline's best band and keeps
+its saturated one. The likely cause is that during quiet periods the belief
+approaches certainty because no evidence arrived, not because the evidence was
+strong. This is a safety limitation, not a tuning parameter, and the v0.3
+candidate does not touch it.
+
+An earlier revision of this page reported `away` recall of 0.00 and treated it
+as a finding. **That was wrong.** `Leave_Home` annotates twelve seconds of
+crossing the threshold, not the hours spent out, so the truth series labelled
+motion inside the house as absence. With away derived from the gap between
+departure and return, recall is 0.36 and coverage rises from 64% to 90%. Three
+further explanations for the remaining gap were tested and rejected: an
+incomplete location map, absent presence-confirming sensors, and occupancy-state
+modelling.
+
+A supervised classifier given the same per-room event counts, three lagged
+steps and time of day reaches **0.607** balanced accuracy on held-out homes,
+against a 0.143 majority-class baseline. Two things follow. The seven-state
+ontology *is* recoverable from motion and door sensors, so the gap is a
+deficiency in the inference rather than a limit of the deployment. And the
+simulator's 0.816 sits **above** the ceiling measured on real homes, so its
+figures exceed what this instrumentation supports at all rather than merely
+being optimistic.
+
+The pipeline recovers about two thirds of what is available, losing most ground
+on `bathroom_activity` (0.25 against 0.80), `away` (0.36 against 0.82) and
+`home_inactive` (0.16 against 0.57), while beating the classifier on
+`home_active`.
+
+Ablating the classifier's features locates the shortfall precisely. Given only
+instantaneous event counts the ceiling is 0.397, and the pipeline scores 0.420:
+**on the evidence it uses, it is already at the ceiling.** The missing accuracy
+is in two things it does not have — an explicit time-of-day term, worth about
++0.105, and several steps of recent room-resolved counts, worth about +0.140.
+The continuous-time Markov prior models how long a state lasts but not when in
+the day it is plausible, so a resident motionless at 02:00 and at 14:00 look
+alike to it. A circadian prior recovers about a tenth of that.
+
+The three components added in response — fitted emission rates, the circadian
+prior and smoothing — **do not combine.** All three together score 0.435
+balanced accuracy against 0.463 for smoothing alone, with calibration worse than
+the baseline. Fitted rates trade accuracy for calibration and smoothing trades
+calibration for accuracy, so stacking them gives up both. See
+[Real-data validation](real_data.md) for which to use when.
+
+Two further attempts failed. Declared dwell times are 3 to 9 times longer than
+real state durations, but fitting them to measurement lowered balanced accuracy
+from 0.449 to 0.429: the long dwells are doing useful work as regularisation,
+and being empirically accurate is not the same as being a useful prior. And the
+history term the ablation valued at +0.140 is not straightforwardly available to
+a recursive filter, which already carries history in its belief and would
+double-count evidence if given lagged observations as well.
+
+Two of the 22, `hh107` and `hh121`, are two-occupant recordings by CASAS
+metadata, and every figure here was computed before that was noticed. Excluding
+them changes the medians by less than a thousandth, but the ontology models one
+resident, and `hh107`'s anomalous behaviour was a clue that went unexamined.
+
+The remaining homes are from one research group's instrumentation, so they are
+not 22 independent studies, and 0.607 is a ceiling for this
+instrumentation rather than for ambient sensing generally. The gap between 0.420
+and what is recoverable is real nonetheless.
+
 ## The single most important limitation
 
 **Every quantitative result in this repository comes from a simulator.**

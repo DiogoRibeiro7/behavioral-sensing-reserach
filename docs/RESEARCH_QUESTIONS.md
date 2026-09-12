@@ -49,6 +49,16 @@ accuracy. Fewer sensors cost accuracy and bought honesty about uncertainty.
 Which of those matters more depends on what the output is used for, and that
 is a question this repository can pose but not settle from simulation.
 
+**The frozen confirmatory study agrees in direction, at different values.**
+Its pre-specified 200-trajectory run puts the eight-sensor gap at 0.00529 and
+the five-sensor gap at 0.1548, against 0.0073 and 0.171 above. The preceding
+figures come from the 100-seed `sensor-modeling ablate` study and are not
+interchangeable with the confirmatory ones, which carry the pre-specified
+non-inferiority test: on that test the five-sensor deployment **failed**
+the pre-specified non-inferiority criterion, its 95% CI of [0.1531, 0.1564]
+lying entirely above the 0.02 margin. Both studies
+are simulator-derived. See the [roadmap](roadmap.md).
+
 **Known threat.** The result depends on the simulator's assumed activity
 levels and sensor rates. See `limitations.md`.
 
@@ -65,12 +75,30 @@ all scored with calibration alongside accuracy.
 calibration error stays bounded, and abstention rising when evidence
 genuinely disappears.
 
-**Current state.** Balanced accuracy 0.858 → 0.748 across 0–40% loss with
-calibration error 0.046 → 0.079. Under total blackout the system abstains.
+**Current state.** On the simulator, balanced accuracy 0.858 → 0.748 across
+0–40% loss with calibration error 0.046 → 0.079, and under total blackout the
+system abstains.
 
 **What would falsify it.** Any regime where confidence stays high while
 accuracy collapses. This is the failure mode the platform exists to prevent,
 and it is tested adversarially rather than assumed.
+
+**This falsification condition has been met.** On real recordings, over 60,948
+scored steps, stated confidence separates correct from incorrect answers by only
++0.073, and the most confident band (0.95–1.00) is *less* accurate at 0.561 than
+the band beneath it at 0.653 while covering 39% of all steps. That is confidence
+staying high while accuracy collapses, measured rather than hypothesised, and no
+threshold repairs it: raising the bar discards the pipeline's best band and keeps
+the saturated one. The frozen confirmatory simulation agrees by a different
+route — mean abstention rose only from 9.7e-06 to 5.3e-05 as missingness went
+from 0% to 40%, so the mechanism barely responds to evidence disappearing.
+
+RQ2 is therefore answered negatively on the evidence available. The architecture
+still prevents the specific failure it was designed against — a failed sensor
+contributes no state preference and never votes for inactivity — but that is a
+weaker property than RQ2 asks about, and the system does not currently fail
+safely in the sense defined here. See [real_data.md](real_data.md) for the
+per-band figures and [limitations.md](limitations.md).
 
 ## RQ3 — How much does person attribution matter?
 
