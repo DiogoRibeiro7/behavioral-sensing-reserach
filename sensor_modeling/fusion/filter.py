@@ -248,6 +248,7 @@ class MultimodalBayesFilter:
             log_belief = log_belief + likelihoods[sensor_id]
 
         self._belief = np.exp(log_belief - logsumexp(log_belief))
+        information_gain = _kl_divergence(self._belief, predicted)
         self._at = moment
 
         # Support is measured against the state the posterior actually
@@ -278,6 +279,7 @@ class MultimodalBayesFilter:
             completeness=reliability_total / len(self.emissions),
             min_confidence=self.config.min_confidence,
             min_completeness=self.config.min_completeness,
+            information_gain=information_gain,
         )
 
     # ------------------------------------------------------------------
@@ -310,6 +312,20 @@ class MultimodalBayesFilter:
         self._belief = belief / total
         moment = state.get("at")
         self._at = datetime.fromisoformat(str(moment)) if moment else None
+
+
+def _kl_divergence(posterior: np.ndarray, predicted: np.ndarray) -> float:
+    """Return ``D_KL(posterior || predicted)`` in nats."""
+    positive = posterior > 0.0
+    return float(
+        np.sum(
+            posterior[positive]
+            * (
+                np.log(posterior[positive])
+                - np.log(np.maximum(predicted[positive], 1e-300))
+            )
+        )
+    )
 
 
 def _support_for(likelihood: np.ndarray, winner: int) -> float:
