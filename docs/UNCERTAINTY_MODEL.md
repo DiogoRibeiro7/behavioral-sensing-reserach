@@ -65,9 +65,11 @@ present and nothing distinguishes them.
 The core quantity is `P(Z_t | O_1:t)`, maintained by forward filtering.
 
 **Prediction.** `b <- b · exp(Q·Δt)`, where `Q` is the ontology generator.
-Uncertainty grows with elapsed time automatically: with no evidence the belief
-relaxes toward the stationary distribution, so confidence decays rather than
-persisting.
+With every sensor likelihood disabled, the belief relaxes toward the stationary
+distribution and does not manufacture extreme confidence. That prior-only case
+must be distinguished from a quiet interval in which working event sensors
+report no activations: under the Poisson emission model, silence is itself
+state-dependent evidence and is applied at every update.
 
 **Update.** Each sensor contributes a tempered, centred log-likelihood:
 
@@ -138,6 +140,23 @@ simulation fails from the other direction: mean abstention rose only from
 barely fires at all. Treat `min_confidence` and `min_completeness` as
 unvalidated. See [real data](real_data.md).
 
+The quiet-period saturation mechanism has now been isolated directly. Starting
+from the stationary distribution, one hour with all sensor likelihoods disabled
+leaves confidence near the stationary maximum, below 0.35. Under the same state
+dynamics, one hour with a representative set of working CASAS-style event
+streams reporting no activations drives the posterior above 0.95 on `sleeping`.
+The transition prior alone therefore does not create the extreme confidence.
+Repeated Poisson silence likelihoods do, with the persistent dynamics carrying
+the accumulated evidence forward.
+
+A second diagnostic sharpens the result. Room-motion silence alone and
+entrance-door silence alone both leave the posterior comparatively diffuse, but
+their combination drives the extreme concentration. The two evidence families
+eliminate different alternatives, so the failure is not simply "silence means
+sleeping" and not simply "the chain is sticky". It is a recursive accumulation
+of complementary negative evidence whose joint effect is much stronger than the
+per-sensor support visible in any single interval.
+
 ### 7. Baseline
 
 Daily features are accumulated from the posterior:
@@ -199,6 +218,10 @@ The properties above are tested rather than asserted:
 
 - `tests/test_fusion.py` — reliability zero contributes nothing; partial
   reliability scales linearly; posteriors normalise; abstention triggers.
+- `tests/test_quiet_period_confidence.py` — prior-only quiet periods remain near
+  stationary confidence; working-but-silent event streams can drive confidence
+  above 0.95; motion-only and door-only silence remain much less concentrated
+  than their combination.
 - `tests/test_adversarial.py` — total blackout abstains; higher missingness is
   never rewarded; every belief remains a valid distribution under combined
   loss, duplication, lateness and drift.
