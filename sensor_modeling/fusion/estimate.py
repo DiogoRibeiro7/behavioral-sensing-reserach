@@ -168,9 +168,10 @@ class StateEstimate:
     completeness: float
     min_confidence: float
     min_completeness: float
+    information_gain: float | None = None
 
     def __post_init__(self) -> None:
-        """Validate the belief vector."""
+        """Validate the belief vector and optional update information gain."""
         belief = np.asarray(self.belief, dtype=float)
         if belief.shape != (self.ontology.size,):
             raise ValueError("belief must have one entry per ontology state")
@@ -180,6 +181,12 @@ class StateEstimate:
         if total <= 0.0:
             raise ValueError("belief must contain at least some probability mass")
         object.__setattr__(self, "belief", belief / total)
+
+        if self.information_gain is not None:
+            value = float(self.information_gain)
+            if not math.isfinite(value) or value < -1e-12:
+                raise ValueError("information_gain must be finite and non-negative")
+            object.__setattr__(self, "information_gain", max(0.0, value))
 
     # ------------------------------------------------------------------
     @property
@@ -346,6 +353,7 @@ class StateEstimate:
             "confidence": self.confidence,
             "margin": self.margin,
             "normalised_entropy": self.normalised_entropy,
+            "information_gain": self.information_gain,
             "completeness": self.completeness,
             "probabilities": {
                 state.value: probability
