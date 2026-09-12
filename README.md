@@ -12,15 +12,16 @@ non-homogeneous Poisson processes.
 
 > **This is a research toolkit, not a medical device.** Nothing it produces is
 > a diagnosis, and no claim of clinical effectiveness is made or supported.
-> Every quantitative result quoted here comes from the bundled simulator and
-> has **not** been validated against real sensor data.
+> Simulator results are not estimates of field performance; the pipeline has
+> now been evaluated on real CASAS recordings and externally tested on a frozen
+> 43-home cohort, with the evidence boundaries described below.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python Version](https://img.shields.io/badge/python-3.10--3.12-blue.svg)](https://www.python.org/downloads/)
 [![CI](https://github.com/DiogoRibeiro7/behavioral-sensing-research/actions/workflows/ci.yml/badge.svg)](https://github.com/DiogoRibeiro7/behavioral-sensing-research/actions/workflows/ci.yml)
 [![Documentation Status](https://readthedocs.org/projects/sensor-modeling/badge/?version=latest)](https://sensor-modeling.readthedocs.io/en/latest/?badge=latest)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21337272.svg)](https://doi.org/10.5281/zenodo.21337272)
-[![Version](https://img.shields.io/badge/version-0.2.0-informational.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.3.0-informational.svg)](CHANGELOG.md)
 
 ## 🎯 Overview
 
@@ -43,6 +44,12 @@ for a supervised classifier with access to the labels. Simulator results are
 therefore not an estimate of real-world performance, and should not be read as
 one. The pipeline is close to the ceiling for the evidence it actually uses;
 the gap is in information those deployments do not carry.
+
+The frozen v0.3 candidate was also tested once on 43 single-resident CASAS homes
+outside the development panel. The optional circadian prior improved the median
+paired household balanced accuracy by **+0.0091**, with a 95% household bootstrap
+interval of **[+0.0054, +0.0117]**; 37 of 43 homes improved. The effect is small
+and does not establish clinical effectiveness or general smart-home performance.
 
 See [Real-data validation](docs/real_data.md) and
 [Known limitations](docs/limitations.md).
@@ -92,7 +99,11 @@ convention:
   evidence while a visitor or carer may be present.
 
 The system can also return `unknown`. Abstention is a first-class output, not
-a failure.
+a failure. Current real-data diagnostics show that the implemented confidence
+threshold is not yet a reliable safety mechanism: confidence weakly separates
+correct from incorrect predictions and becomes less reliable in the highest
+confidence band. Version 0.3.0 exposes additional uncertainty diagnostics but
+does not claim that abstention has been solved.
 
 ### Supported and unsupported claims
 
@@ -160,19 +171,19 @@ including its own false-alert burden. Two runs produce identical numbers.
 sensor-modeling ablate --days 14 --seeds 11 22 33 44
 ```
 
-Every configuration is evaluated on identical simulated households, so the
-comparison measures sensing rather than residents. On a four-seed sweep, adding
-a person-bound wearable to six object sensors recovered most of the full
-ten-sensor deployment's accuracy — the remaining gap is 0.012 balanced accuracy
-(95% CI [+0.004, +0.020]), real but small — while removing the wearable cost
-0.173 (95% CI [+0.140, +0.201]). A five-sensor configuration was the *best
-calibrated* of all despite lower accuracy, which an accuracy-only evaluation
-would have hidden. See [`docs/evaluation.md`](docs/evaluation.md).
+The CLI supports reproducible paired ablations, but reported conclusions should
+use study-scale replications rather than the four-seed smoke-test example above.
+In the 100-seed study, the eight-sensor configuration was 0.0073 balanced
+accuracy below the full deployment (95% CI [+0.0063, +0.0083]), while the
+five-sensor configuration was 0.171 lower. In the later frozen confirmatory
+study, the pre-specified five-sensor deployment failed the 0.02 non-inferiority
+margin with a gap of 0.1548 (95% CI [0.1531, 0.1564]), whereas an eight-sensor
+configuration remained within 0.00529 of the full ten-sensor system.
 
 > These numbers describe behaviour on the bundled simulator under its default
-> parameters. They are not estimates of field performance. Nothing here has
-> been validated against real sensor data — see
-> [`docs/limitations.md`](docs/limitations.md).
+> parameters. They are not estimates of field performance. Real-data and
+> external-validation results are reported separately in
+> [`docs/real_data.md`](docs/real_data.md) and the v0.3 release notes.
 
 ## ✨ Features
 
@@ -215,8 +226,6 @@ would have hidden. See [`docs/evaluation.md`](docs/evaluation.md).
 - P-spline regularization for smooth intensity curves
 - Time-rescaling diagnostics for model validation
 - Lewis-Shedler thinning for simulation and testing
-
-### 📊 **Advanced Analysis & Interpretation**
 
 #### **Causal Analysis**
 
@@ -579,7 +588,7 @@ If you use this software in your research, please cite it as:
   author={Ribeiro, Diogo},
   year={2026},
   url={https://github.com/DiogoRibeiro7/behavioral-sensing-research},
-  version={0.2.0},
+  version={0.3.0},
   doi={10.5281/zenodo.21337272}
 }
 ```
